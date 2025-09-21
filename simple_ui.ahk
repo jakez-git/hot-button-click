@@ -34,65 +34,74 @@ AddHotButton(*) {
     MyGui.Hide()
     MyStatusBar.SetText("Click and drag to select a region...")
 
-    ; Create a temporary GUI for selection
     global SelectionGui := Gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
-    SelectionGui.BackColor = "EEAA99"
-    WinSetTransparent(200, SelectionGui)
-    SelectionGui.Show("x0 y0 w0 h0 NA")
+    SelectionGui.Show("x0 y0 w" A_ScreenWidth " h" A_ScreenHeight, "NA")
+
+    global hbm := CreateDIBSection(A_ScreenWidth, A_ScreenHeight)
+    global hdc := CreateCompatibleDC()
+    global obm := SelectObject(hdc, hbm)
+    global G := Gdip_GraphicsFromHDC(hdc)
+
+    global pPen := Gdip_CreatePen(0xFFFF0000, 2)
 
     global startX, startY, endX, endY
-    Hotkey("*LButton", SelectRegion_MouseDown, "On")
+    OnMessage(0x201, WM_LBUTTONDOWN)
+    OnMessage(0x202, WM_LBUTTONUP)
 }
 
-SelectRegion_MouseDown(*) {
-    Hotkey("*LButton", SelectRegion_MouseDown, "Off")
-    MouseGetPos(&startX, &startY)
-    Hotkey("*LButton Up", SelectRegion_MouseUp, "On")
-    SetTimer(UpdateSelection, 10)
-}
-
-SelectRegion_MouseUp(*) {
-    Hotkey("*LButton Up", SelectRegion_MouseUp, "Off")
-    SetTimer(UpdateSelection, "Off")
-    MouseGetPos(&endX, &endY)
-
-    ; Destroy the selection GUI
-    SelectionGui.Destroy()
-
-    ; Calculate the rectangle
-    x := Min(startX, endX)
-    y := Min(startY, endY)
-    w := Abs(startX - endX)
-    h := Abs(startY - endY)
-
-    if (w > 0 && h > 0) {
-        ; Capture the selected region
-        pBitmap := Gdip_BitmapFromScreen(x "|" y "|" w "|" h)
-
-        ; Save the image to a file
-        imagePath := "hot_buttons\" A_TickCount ".png"
-        Gdip_SaveBitmapToFile(pBitmap, imagePath)
-
-        ; Add to our list
-        HotButtons.Push(imagePath)
-        HotButtonList.Add(, imagePath)
-
-        Gdip_DisposeImage(pBitmap)
-        MyStatusBar.SetText("Button added.")
-    } else {
-        MyStatusBar.SetText("Invalid region selected.")
+WM_LBUTTONDOWN(wParam, lParam, msg, hwnd) {
+    if (hwnd = SelectionGui.Hwnd) {
+        MouseGetPos(&startX, &startY)
+        SetTimer(UpdateSelection, 10)
     }
-
-    MyGui.Show()
 }
+
+WM_LBUTTONUP(wParam, lParam, msg, hwnd) {
+    if (hwnd = SelectionGui.Hwnd) {
+        SetTimer(UpdateSelection, "Off")
+        OnMessage(0x201, "")
+        OnMessage(0x202, "")
+        MouseGetPos(&endX, &endY)
+
+        Gdip_DeletePen(pPen)
+        SelectObject(hdc, obm)
+        DeleteObject(hbm)
+        DeleteDC(hdc)
+        Gdip_DeleteGraphics(G)
+
+        SelectionGui.Destroy()
+
+        x := Min(startX, endX)
+        y := Min(startY, endY)
+        w := Abs(startX - endX)
+        h := Abs(startY - endY)
+
+        if (w > 0 && h > 0) {
+            pBitmap := Gdip_BitmapFromScreen(x "|" y "|" w "|" h)
+            imagePath := "hot_buttons\" A_TickCount ".png"
+            Gdip_SaveBitmapToFile(pBitmap, imagePath)
+            HotButtons.Push(imagePath)
+            HotButtonList.Add(, imagePath)
+            Gdip_DisposeImage(pBitmap)
+            MyStatusBar.SetText("Button added.")
+        } else {
+            MyStatusBar.SetText("Invalid region selected.")
+        }
+
+        MyGui.Show()
+    }
+}
+
 
 UpdateSelection() {
     MouseGetPos(&currX, &currY)
-    x := Min(startX, currX)
-    y := Min(startY, currY)
+    Gdip_GraphicsClear(G)
     w := Abs(startX - currX)
     h := Abs(startY - currY)
-    SelectionGui.Show("x" x " y" y " w" w " h" h " NA")
+    x := Min(startX, currX)
+    y := Min(startY, currY)
+    Gdip_DrawRectangle(G, pPen, x, y, w, h)
+    UpdateLayeredWindow(SelectionGui.Hwnd, hdc)
 }
 
 
@@ -116,8 +125,6 @@ ScanForHotButtons() {
         return
     }
 
-    ; If there has been any keyboard or mouse activity in the last 30 seconds,
-    ; the application will do an idle sleep for 10 seconds.
     if (A_TimeIdlePhysical < 30000) {
         MyStatusBar.SetText("User active. Pausing for 10 seconds...")
         Sleep(10000)
@@ -125,32 +132,29 @@ ScanForHotButtons() {
         return
     }
 
+    MyStatusBar.SetText("Scanning for hot buttons...")
     for path in HotButtons {
-        ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, "*10 *TransBlack " path)
+        ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, "*10 " path)
         if (FoundX != "") {
-            ; Get the size of the image to calculate the center
             pBitmap := Gdip_CreateBitmapFromFile(path)
             if (pBitmap = -1) {
-                ; Could not load the image, maybe it's an invalid path
                 continue
             }
             Gdip_GetImageDimensions(pBitmap, &w, &h)
             Gdip_DisposeImage(pBitmap)
 
-            ; Store original mouse position and active window
             MouseGetPos(&origX, &origY)
-            activeWin := WinGetTitle("A")
+            activeWin := WinGetID("A")
 
-            ; Click the center of the button
             Click(FoundX + w/2, FoundY + h/2)
-            Sleep(100) ; Give the click time to register
+            Sleep(100)
 
-            ; Restore mouse and focus
             MouseMove(origX, origY)
-            WinActivate(activeWin)
-            break ; Click one button at a time
+            WinActivate("ahk_id " activeWin)
+            break
         }
     }
+    MyStatusBar.SetText("Monitoring...")
 }
 
 MyGui.OnEvent("Close", (*) => Gdip_Shutdown(pToken) & ExitApp())
