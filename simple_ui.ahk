@@ -5,6 +5,7 @@
 global pToken := Gdip_Startup()
 global HotButtons := []
 global isMonitoring := false
+global shadeVariation := 10
 FileCreateDir("hot_buttons")
 
 
@@ -21,6 +22,9 @@ MyGui.Add("Button", "w120 yp x+10", "Stop Monitoring").OnEvent("Click", StopMoni
 global HotButtonList := MyGui.Add("ListView", "w380 r10", ["Image Path"])
 HotButtonList.ModifyCol(1, "AutoHdr")
 
+; Add shade variation option
+MyGui.Add("Text",, "Shade Variation (0-255):")
+MyGui.Add("Edit", "w50 vshadeVariation", shadeVariation).OnEvent("Change", UpdateShadeVariation)
 
 ; Add a status bar
 global MyStatusBar := MyGui.Add("StatusBar")
@@ -30,6 +34,10 @@ MyStatusBar.SetText("Stopped")
 MyGui.Show("w400")
 
 ; --- Event Handlers ---
+UpdateShadeVariation(control, info) {
+    global shadeVariation := control.Value
+}
+
 AddHotButton(*) {
     MyGui.Hide()
     MyStatusBar.SetText("Click and drag to select a region...")
@@ -80,7 +88,10 @@ WM_LBUTTONUP(wParam, lParam, msg, hwnd) {
             pBitmap := Gdip_BitmapFromScreen(x "|" y "|" w "|" h)
             imagePath := "hot_buttons\" A_TickCount ".png"
             Gdip_SaveBitmapToFile(pBitmap, imagePath)
-            HotButtons.Push(imagePath)
+
+            Gdip_GetImageDimensions(pBitmap, &imgW, &imgH)
+            HotButtons.Push({path: imagePath, w: imgW, h: imgH})
+
             HotButtonList.Add(, imagePath)
             Gdip_DisposeImage(pBitmap)
             MyStatusBar.SetText("Button added.")
@@ -127,26 +138,19 @@ ScanForHotButtons() {
 
     if (A_TimeIdlePhysical < 30000) {
         MyStatusBar.SetText("User active. Pausing for 10 seconds...")
-        Sleep(10000)
-        MyStatusBar.SetText("Monitoring...")
+        SetTimer(ScanForHotButtons, "Off")
+        SetTimer(EnableMonitoring, -10000) ; one-time timer
         return
     }
 
     MyStatusBar.SetText("Scanning for hot buttons...")
-    for path in HotButtons {
-        ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, "*10 " path)
+    for button in HotButtons {
+        ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, "*" shadeVariation " " button.path)
         if (FoundX != "") {
-            pBitmap := Gdip_CreateBitmapFromFile(path)
-            if (pBitmap = -1) {
-                continue
-            }
-            Gdip_GetImageDimensions(pBitmap, &w, &h)
-            Gdip_DisposeImage(pBitmap)
-
             MouseGetPos(&origX, &origY)
             activeWin := WinGetID("A")
 
-            Click(FoundX + w/2, FoundY + h/2)
+            Click(FoundX + button.w/2, FoundY + button.h/2)
             Sleep(100)
 
             MouseMove(origX, origY)
@@ -155,6 +159,13 @@ ScanForHotButtons() {
         }
     }
     MyStatusBar.SetText("Monitoring...")
+}
+
+EnableMonitoring() {
+    if (isMonitoring) {
+        MyStatusBar.SetText("Monitoring...")
+        SetTimer(ScanForHotButtons, 1000)
+    }
 }
 
 MyGui.OnEvent("Close", (*) => Gdip_Shutdown(pToken) & ExitApp())
