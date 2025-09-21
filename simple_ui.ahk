@@ -90,6 +90,15 @@ ScanForHotButtons() {
         return
     }
 
+    ; If there has been any keyboard or mouse activity in the last 30 seconds,
+    ; the application will do an idle sleep for 10 seconds.
+    if (A_TimeIdlePhysical < 30000) {
+        MyStatusBar.SetText("User active. Pausing for 10 seconds...")
+        Sleep(10000)
+        MyStatusBar.SetText("Monitoring...")
+        return
+    }
+
     for path in HotButtons {
         ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, path)
         if (FoundX != "") {
@@ -108,6 +117,7 @@ ScanForHotButtons() {
 
             ; Click the center of the button
             Click(FoundX + w/2, FoundY + h/2)
+            Sleep(100) ; Give the click time to register
 
             ; Restore mouse and focus
             MouseMove(origX, origY)
