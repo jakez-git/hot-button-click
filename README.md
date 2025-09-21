@@ -38,6 +38,6 @@ The script works in a continuous loop:
 
 1.  **Idle Check**: It first checks if the user has been idle for a configurable amount of time (default: 3 seconds).
 2.  **Window Detection**: If the user is idle, it scans for all visible windows with the configured Windsurf executable name.
-3.  **Button Scanning**: For each Windsurf window found, it scans for visible buttons. (Note: This part is currently a placeholder and needs to be implemented with a UI Automation library).
+3.  **Button Scanning**: For each Windsurf window found, it scans for visible buttons using a UI Automation (UIA) library.
 4.  **Matching and Clicking**: It compares the text of each found button against the list in `config/button_targets.txt`. If a match is found, it clicks the button and then waits for the next cycle.
 5.  **Logging**: All steps are logged to `windsurf_automator.log`.

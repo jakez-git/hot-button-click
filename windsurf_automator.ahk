@@ -8,6 +8,8 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
+#include <UIA>
+
 ; --- Configuration ---
 global BUTTON_TARGETS_FILE := "config\button_targets.txt"
 global LOG_FILE := "windsurf_automator.log"
@@ -61,19 +63,38 @@ ScanAndClick() {
 }
 
 ClickButton(button) {
-    Log("Placeholder: Clicking button '" . button.Name . "'")
-    ; TODO: Implement actual click using the button.Element from the UIA library.
+    try {
+        Log("Attempting to click button '" . button.Name . "'")
+        ; Most buttons can be clicked via the InvokePattern
+        button.Element.Invoke()
+        Log("Successfully clicked button '" . button.Name . "'")
+        Sleep(1000) ; Wait for a second to allow UI to update
+    } catch as e {
+        Log("Error clicking button '" . button.Name . "': " . e.Message)
+    }
 }
 
 ScanWindowForButtons(hwnd) {
     Log("Scanning for buttons in window: " . hwnd)
-    ; TODO: This is a placeholder. UI Automation logic will go here.
-    ; For now, it returns a dummy array of button-like objects.
-    local found_buttons := [
-        {Name: "Save", Element: "dummy_element_1"},
-        {Name: "Cancel", Element: "dummy_element_2"},
-        {Name: "Apply", Element: "dummy_element_3"}
-    ]
+    local found_buttons := []
+    try {
+        local window_element := UIA.ElementFromHandle(hwnd)
+        ; Find all button elements in the window
+        local button_elements := window_element.FindAll({Type: "Button"})
+
+        if (button_elements.Length > 0) {
+            for button_el in button_elements {
+                try {
+                    ; Create an object with the button's name and the UIA element
+                    found_buttons.Push({Name: button_el.Name, Element: button_el})
+                } catch as e {
+                    Log("Error getting button name: " . e.Message)
+                }
+            }
+        }
+    } catch as e {
+        Log("UIA Error in ScanWindowForButtons: " . e.Message)
+    }
     return found_buttons
 }
 
