@@ -32,23 +32,41 @@ MyGui.Show("w400")
 ; --- Event Handlers ---
 AddHotButton(*) {
     MyGui.Hide()
-    MyStatusBar.SetText("Click on the button to capture...")
-    KeyWait("LButton", "D") ; Wait for the left mouse button to be pressed
-    KeyWait("LButton", "U") ; Wait for the left mouse button to be released
+    MyStatusBar.SetText("Click and drag to select a region...")
 
-    MouseGetPos(,, &hWnd, &Control)
+    ; Create a temporary GUI for selection
+    global SelectionGui := Gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
+    SelectionGui.BackColor = "EEAA99"
+    WinSetTransparent(200, SelectionGui)
+    SelectionGui.Show("x0 y0 w0 h0 NA")
 
-    if (Control != "")
-    {
-        WinGetPos(&winX, &winY, &winW, &winH, "ahk_id " hWnd)
-        ControlGetPos(&conX, &conY, &conW, &conH, Control)
+    global startX, startY, endX, endY
+    Hotkey("*LButton", SelectRegion_MouseDown, "On")
+}
 
-        x := winX + conX
-        y := winY + conY
-        w := conW
-        h := conH
+SelectRegion_MouseDown(*) {
+    Hotkey("*LButton", SelectRegion_MouseDown, "Off")
+    MouseGetPos(&startX, &startY)
+    Hotkey("*LButton Up", SelectRegion_MouseUp, "On")
+    SetTimer(UpdateSelection, 10)
+}
 
-        ; Capture the control image
+SelectRegion_MouseUp(*) {
+    Hotkey("*LButton Up", SelectRegion_MouseUp, "Off")
+    SetTimer(UpdateSelection, "Off")
+    MouseGetPos(&endX, &endY)
+
+    ; Destroy the selection GUI
+    SelectionGui.Destroy()
+
+    ; Calculate the rectangle
+    x := Min(startX, endX)
+    y := Min(startY, endY)
+    w := Abs(startX - endX)
+    h := Abs(startY - endY)
+
+    if (w > 0 && h > 0) {
+        ; Capture the selected region
         pBitmap := Gdip_BitmapFromScreen(x "|" y "|" w "|" h)
 
         ; Save the image to a file
@@ -61,14 +79,22 @@ AddHotButton(*) {
 
         Gdip_DisposeImage(pBitmap)
         MyStatusBar.SetText("Button added.")
-    }
-    else
-    {
-        MyStatusBar.SetText("Failed to identify a control. Please try again.")
+    } else {
+        MyStatusBar.SetText("Invalid region selected.")
     }
 
     MyGui.Show()
 }
+
+UpdateSelection() {
+    MouseGetPos(&currX, &currY)
+    x := Min(startX, currX)
+    y := Min(startY, currY)
+    w := Abs(startX - currX)
+    h := Abs(startY - currY)
+    SelectionGui.Show("x" x " y" y " w" w " h" h " NA")
+}
+
 
 StartMonitoring(*) {
     if (isMonitoring) {
@@ -100,7 +126,7 @@ ScanForHotButtons() {
     }
 
     for path in HotButtons {
-        ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, path)
+        ImageSearch(&FoundX, &FoundY, 0, 0, A_ScreenWidth, A_ScreenHeight, "*10 *TransBlack " path)
         if (FoundX != "") {
             ; Get the size of the image to calculate the center
             pBitmap := Gdip_CreateBitmapFromFile(path)
