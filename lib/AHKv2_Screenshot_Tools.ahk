@@ -1,3 +1,11 @@
+; ======================================================================================================================
+; Library:       AHKv2 GDI+ Screenshot Tools
+; Description:   A comprehensive GDI+ library for AutoHotkey v2, providing a wide range of functions for image
+;                manipulation, screen capturing, and drawing. This library is a general-purpose tool and is
+;                utilized by the Hot Button Clicker application for its screenshot and graphics functionalities.
+; Version:       1.62 (as originally authored)
+; ======================================================================================================================
+
 ; v1.62
 ;
 ;###############################################################################
@@ -53,8 +61,9 @@
 ######
 
 ; Function:                             UpdateLayeredWindow
-; Description:                          Updates a layered window with the handle
- to the DC of a gdi bitmap
+; Description:                          Updates a layered window with the handle to the DC of a GDI bitmap.
+; Note for Hot Button Clicker:          Used to draw the semi-transparent selection rectangle on the screen
+;                                       when the user is adding a new hot button.
 ;
 ; hwnd                                  Handle of the layered window to update
 ; hdc                                   Handle to the DC of the GDI bitmap to up
@@ -321,7 +330,9 @@ SetSysColorToControl(hwnd, SysColor:=15)
 ######
 
 ; Function                              Gdip_BitmapFromScreen
-; Description                   Gets a gdi+ bitmap from the screen
+; Description                   Gets a GDI+ bitmap from a specified region of the screen.
+; Note for Hot Button Clicker:  This function is essential for capturing the user-selected region
+;                               that defines a new hot button.
 ;
 ; Screen                                0 = All screens
 ;                                               Any numerical value = Just that
@@ -1072,8 +1083,8 @@ ags, "ptr", str, "uint*", &length)
 ######
 
 ; Function                              Gdip_DrawRectangle
-; Description                   This function uses a pen to draw the outline of
-a rectangle into the Graphics of a bitmap
+; Description                   This function uses a pen to draw the outline of a rectangle into the Graphics of a bitmap.
+; Note for Hot Button Clicker:  This is the function that draws the red selection box on the screen overlay.
 ;
 ; pGraphics                             Pointer to the Graphics of a bitmap
 ; pPen                                  Pointer to a pen
@@ -1787,8 +1798,9 @@ Gdip_GraphicsFromImage(pBitmap)
 ######
 
 ; Function                              Gdip_GraphicsFromHDC
-; Description                   This function gets the graphics from the handle
-to a device context
+; Description                   This function gets the graphics from the handle to a device context.
+; Note for Hot Button Clicker:  Used to get a graphics context from the screen's Device Context (DC)
+;                               so that the selection rectangle can be drawn on it.
 ;
 ; hdc                                   This is the handle to the device context
 ;
@@ -1916,8 +1928,8 @@ t)
 ######
 
 ; Function:                             Gdip_SaveBitmapToFile
-; Description:                  Saves a bitmap to a file in any supported format
- onto disk
+; Description:                  Saves a bitmap to a file in any supported format onto disk.
+; Note for Hot Button Clicker:  Used to save the captured hot button screenshot to the `hot_buttons` directory.
 ;
 ; pBitmap                               Pointer to a bitmap
 ; sOutput                               The name of the file that the bitmap wil
@@ -2085,8 +2097,10 @@ Gdip_GetImageHeight(pBitmap)
 ;###############################################################################
 ######
 
-; Function                              Gdip_GetDimensions
-; Description                   Gives the width and height of a bitmap
+; Function                              Gdip_GetImageDimensions
+; Description                   Gives the width and height of a bitmap.
+; Note for Hot Button Clicker:  Used to get the dimensions of a new hot button image, which is needed
+;                               to calculate the center point for clicking.
 ;
 ; pBitmap                               Pointer to a bitmap
 ; Width                                 ByRef variable. This variable will be se
@@ -2558,6 +2572,13 @@ Gdip_CloneBitmapArea(pBitmap, x, y, w, h, Format:=0x26200A)
 ;###############################################################################
 ######
 
+/**
+ * Creates a GDI+ pen object with a specified color and width.
+ * Note for Hot Button Clicker: Used to create the red pen for drawing the selection rectangle.
+ * @param {Integer} ARGB The ARGB color value of the pen.
+ * @param {Float} w The width of the pen.
+ * @returns {UPtr} A pointer to the created pen object.
+ */
 Gdip_CreatePen(ARGB, w)
 {
         DllCall("gdiplus\GdipCreatePen1", "UInt", ARGB, "Float", w, "Int", 2, "U
@@ -2714,6 +2735,11 @@ Gdip_CloneBrush(pBrush)
 ;###############################################################################
 ######
 
+/**
+ * Deletes a GDI+ pen object, freeing its resources.
+ * @param {UPtr} pPen A pointer to the pen object to delete.
+ * @returns {Integer} Status enumeration result.
+ */
 Gdip_DeletePen(pPen)
 {
         return DllCall("gdiplus\GdipDeletePen", "UPtr", pPen)
@@ -2730,6 +2756,11 @@ Gdip_DeleteBrush(pBrush)
 ;###############################################################################
 ######
 
+/**
+ * Deletes a GDI+ bitmap object, freeing its resources.
+ * @param {UPtr} pBitmap A pointer to the bitmap object to delete.
+ * @returns {Integer} Status enumeration result.
+ */
 Gdip_DisposeImage(pBitmap)
 {
         return DllCall("gdiplus\GdipDisposeImage", "UPtr", pBitmap)
@@ -2738,6 +2769,11 @@ Gdip_DisposeImage(pBitmap)
 ;###############################################################################
 ######
 
+/**
+ * Deletes a GDI+ graphics object, freeing its resources.
+ * @param {UPtr} pGraphics A pointer to the graphics object to delete.
+ * @returns {Integer} Status enumeration result.
+ */
 Gdip_DeleteGraphics(pGraphics)
 {
         return DllCall("gdiplus\GdipDeleteGraphics", "UPtr", pGraphics)
@@ -3100,6 +3136,12 @@ Gdip_SetCompositingMode(pGraphics, CompositingMode:=0)
 ;###############################################################################
 ######
 
+/**
+ * Initializes the GDI+ library, returning a token that must be used to shut it down later.
+ * This function must be called before any other GDI+ operations are performed.
+ * Note for Hot Button Clicker: This is called once when the main script starts.
+ * @returns {UPtr} A token for the GDI+ session.
+ */
 Gdip_Startup()
 {
         if (!DllCall("LoadLibrary", "str", "gdiplus", "UPtr")) {
@@ -3120,6 +3162,12 @@ plus on your system")
         return pToken
 }
 
+/**
+ * Shuts down the GDI+ library, releasing associated resources.
+ * Note for Hot Button Clicker: This is called when the GUI is closed.
+ * @param {UPtr} pToken The GDI+ session token returned by `Gdip_Startup`.
+ * @returns {Integer} 0 on success.
+ */
 Gdip_Shutdown(pToken)
 {
         DllCall("gdiplus\GdipShutdown", "UPtr", pToken)
